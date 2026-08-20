@@ -34,18 +34,31 @@ jobs:
         run: |
           mkdir -p artifacts
           cd artifacts
-          
+
           artifacts_url=${{ github.event.workflow_run.artifacts_url }}
-          
+
           gh api --paginate "$artifacts_url" -q '.artifacts[] | [.name, .archive_download_url] | @tsv' | while read artifact
           do
             IFS=$'\t' read name url <<< "$artifact"
-            gh api $url > "$name.zip"
+            gh api "$url" > "$name.zip"
             unzip -d "$name" "$name.zip"
           done
           ls -alhtR
 
+      - name: Detect XML test reports
+        id: test_reports
+        shell: bash
+        run: |
+          if find artifacts -type f -name '*.xml' -print -quit | grep -q .; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "XML test reports found."
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No XML test reports were produced by ${{ github.event.workflow_run.name }}; reporter steps will be skipped."
+          fi
+
       - name: Publish Test Results to PR
+        if: steps.test_reports.outputs.found == 'true'
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
           commit: ${{ github.event.workflow_run.head_sha }}
@@ -56,14 +69,21 @@ jobs:
 
       - name: Publish Annotated Test Results
         uses: mikepenz/action-junit-report@v6
-        if: always()
+        if: always() && steps.test_reports.outputs.found == 'true'
         with:
           report_paths: "artifacts/**/*.xml"
 
       - name: Publish Test Report Summary
+        if: steps.test_reports.outputs.found == 'true'
         uses: dorny/test-reporter@v3
         with:
-          #artifact: test-results            # artifact name
-          name: JEST Tests                  # Name of the check run which will be created
-          path: "artifacts/**/*.xml"        # Path to test results
-          reporter: jest-junit              # Format of test results
+          name: JEST Tests
+          path: "artifacts/**/*.xml"
+          reporter: jest-junit
+
+      - name: Report missing XML artifacts
+        if: steps.test_reports.outputs.found != 'true'
+        run: |
+          echo "## Test report publication skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "The upstream workflow completed without publishing XML test-result artifacts." >> "$GITHUB_STEP_SUMMARY"
+          echo "This is not treated as a reporter failure; inspect the upstream CI job if XML reports were expected." >> "$GITHUB_STEP_SUMMARY"
