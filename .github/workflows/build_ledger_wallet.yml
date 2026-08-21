@@ -8,8 +8,6 @@ name: Build minotari_ledger_wallet
     branches:
       - "build-all-*"
       - "build-ledger-*"
-  schedule:
-    - cron: "05 00 * * *"
   workflow_dispatch:
 
 env:
