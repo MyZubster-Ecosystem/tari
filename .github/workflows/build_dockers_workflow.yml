@@ -3,13 +3,6 @@ name: Build docker images - workflow_call/on-demand
 
 'on':
   workflow_call:
-    secrets:
-      DOCKER_PROVIDER:
-        required: true
-      DOCKER_USERNAME:
-        required: true
-      DOCKER_PASSWORD:
-        required: true
     inputs:
       toolchain:
         type: string
@@ -120,7 +113,6 @@ jobs:
 
             if [ ! -z "${{ inputs.tag_alias }}" ] ; then
               echo "Setup tag_alias with network"
-              echo "TAG_ALIASQ=${{ secrets.DOCKER_PROVIDER }}/${{ secrets.DOCKER_REPO }}/${{ matrix.builds.image_name }}:${{ inputs.tag_alias }}-${{ matrix.builds.tari_network }}-${{ matrix.builds.arch }}" >> $GITHUB_ENV
               echo "TAG_ALIASG=ghcr.io/${{ github.repository_owner }}/${{ matrix.builds.image_name }}:${{ inputs.tag_alias }}-${{ matrix.builds.tari_network }}-${{ matrix.builds.arch }}" >> $GITHUB_ENV
             fi
             echo "DSuffix=-${{ matrix.builds.tari_network }}-${{ matrix.builds.arch }}" >> $GITHUB_ENV
@@ -147,9 +139,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            # name/${{ matrix.builds.image_name }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.builds.image_name }}
-            ${{ secrets.DOCKER_PROVIDER }}/${{ secrets.DOCKER_REPO }}/${{ matrix.builds.image_name }}
           tags: |
             type=schedule
             type=ref,event=tag
@@ -161,15 +151,13 @@ jobs:
             type=sha
           labels: |
             maintainer=${{ github.actor }}
-            quay.expires-after=${{ env.EXPIRATION }}
-            org.opencontainers.image.vendor=TariLabs
+            org.opencontainers.image.vendor=MyZubster-Ecosystem
             org.opencontainers.image.title=${{ matrix.builds.image_name }}
             org.opencontainers.image.description=Tari docker image ${{ matrix.builds.image_name }} for ${{ matrix.builds.arch }}
             org.opencontainers.image.url=https://github.com/${{ github.repository }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ matrix.builds.version }}
           flavor: |
-            # latest=${{ startsWith(github.ref, 'refs/tags/v') }}
             latest=false
             suffix=${{ env.DSuffix }}
 
@@ -179,13 +167,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to Docker Image Provider
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ secrets.DOCKER_PROVIDER }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Docker image build and push
         id: docker_build
@@ -208,10 +189,8 @@ jobs:
             TARI_TARGET_NETWORK=${{ matrix.builds.tari_target_network }}
             ${{ env.DOCKER_SUBTAG }}
           tags: |
-            ${{ secrets.DOCKER_PROVIDER }}/${{ secrets.DOCKER_REPO }}/${{ matrix.builds.image_name }}:${{ matrix.builds.version }}${{ env.DSuffix }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.builds.image_name }}:${{ matrix.builds.version }}${{ env.DSuffix }}
             ${{ steps.meta.outputs.tags }}
-            ${{ env.TAG_ALIASQ }}
             ${{ env.TAG_ALIASG }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
@@ -230,10 +209,9 @@ jobs:
       packages: write
 
     steps:
-      - name: Log in to Registries
+      - name: Log in to GitHub Container Registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login ${{ secrets.DOCKER_PROVIDER }} -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
 
       - name: Pre for multi-arch image merge
         env:
@@ -268,64 +246,56 @@ jobs:
             echo "Found ${#multiarch_images[@]} multi-arch Docker images."
             echo "${multiarch_images[*]}"
             for DENTRY in "${multiarch_images[@]}"; do
-              DNAME="${DENTRY%%:*}"             # before first :
-              REST="${DENTRY#*:}"               # drop first :
-              DVERSION="${REST%%:*}"            # version
-              DNETWORK="${REST##*:}"            # tari_network
+              DNAME="${DENTRY%%:*}"
+              REST="${DENTRY#*:}"
+              DVERSION="${REST%%:*}"
+              DNETWORK="${REST##*:}"
 
               if [ "${DNAME:0:9}" = "minotari_" ] ; then
                 DSUFFIX=-${DNETWORK}
               else
                 DSUFFIX=
               fi
-              echo "Multi-arch ${DNAME} processing ..."
-              for DREGISTRY in ghcr.io quay.io; do
-                if [[ "${DREGISTRY}" == "ghcr.io" ]]; then
-                  REPO="${{ github.repository_owner }}"
-                else
-                  REPO="${{ secrets.DOCKER_REPO }}"
-                fi
 
-                echo "Registry run - ${DREGISTRY}"
-                echo "Creating multi-arch image for ${REPO}/${DNAME} for ${DVERSION}${DSUFFIX}"
+              DREGISTRY=ghcr.io
+              REPO="${{ github.repository_owner }}"
+              echo "Creating multi-arch image for ${REPO}/${DNAME} for ${DVERSION}${DSUFFIX}"
+              docker manifest create \
+                ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX} \
+                  --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-amd64 \
+                  --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-arm64
+
+              echo "Inspect multi-arch image for ${REPO}/${DNAME}"
+              docker manifest inspect ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX} > manifest.json
+              cat manifest.json
+              echo "Pushing multi-arch image for ${REPO}/${DNAME}"
+              docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX} || true
+
+              if [[ "${{ inputs.tag_alias }}" =~ ^latest-.*$ ]]; then
+                echo "Latest Alias Multi-Arch tag - ${{ inputs.tag_alias }}"
                 docker manifest create \
-                  ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX} \
+                  ${DREGISTRY}/${REPO}/${DNAME}:${{ inputs.tag_alias }}${DSUFFIX} \
                     --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-amd64 \
                     --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-arm64
+                docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:${{ inputs.tag_alias }}${DSUFFIX} || true
+              fi
 
-                echo "Inspect multi-arch image for ${REPO}/${DNAME}"
-                docker manifest inspect ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX} > manifest.json
-                cat manifest.json
-                echo "Pushing multi-arch image for ${REPO}/${DNAME}"
-                docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX} || true
+              if [[ "${GITHUB_REF}" =~ ^refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+                echo "Release Multi-Arch Tag - ${GITHUB_REF_NAME} for ${GITHUB_REF}"
+                docker manifest create \
+                  ${DREGISTRY}/${REPO}/${DNAME}:${GITHUB_REF_NAME} \
+                    --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-amd64 \
+                    --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-arm64
+                docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:${GITHUB_REF_NAME} || true
+              fi
 
-                if [[ "${{ inputs.tag_alias }}" =~ ^latest-.*$ ]]; then
-                  echo "Latest Alias Multi-Arch tag - ${{ inputs.tag_alias }}"
-                  docker manifest create \
-                    ${DREGISTRY}/${REPO}/${DNAME}:${{ inputs.tag_alias }}${DSUFFIX} \
-                      --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-amd64 \
-                      --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-arm64
-                  docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:${{ inputs.tag_alias }}${DSUFFIX} || true
-                fi
-
-                if [[ "${GITHUB_REF}" =~ ^refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-                  echo "Release Multi-Arch Tag - ${GITHUB_REF_NAME} for ${GITHUB_REF}"
-                  docker manifest create \
-                    ${DREGISTRY}/${REPO}/${DNAME}:${GITHUB_REF_NAME} \
-                      --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-amd64 \
-                      --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-arm64
-                  docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:${GITHUB_REF_NAME} || true
-                fi
-
-                if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-                  echo "Latest Release Multi-Arch tag - $GITHUB_REF_NAME for $GITHUB_REF using ${DVERSION}${DSUFFIX}"
-                  docker manifest create \
-                    ${DREGISTRY}/${REPO}/${DNAME}:latest${DSUFFIX} \
-                      --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-amd64 \
-                      --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-arm64
-                  #docker manifest annotate ${DREGISTRY}/${REPO}/${DNAME}:latest${DSUFFIX} --file manifest.json
-                  docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:latest${DSUFFIX} || true
-                fi
-              done
+              if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+                echo "Latest Release Multi-Arch tag - $GITHUB_REF_NAME for $GITHUB_REF using ${DVERSION}${DSUFFIX}"
+                docker manifest create \
+                  ${DREGISTRY}/${REPO}/${DNAME}:latest${DSUFFIX} \
+                    --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-amd64 \
+                    --amend ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX}-arm64
+                docker manifest push ${DREGISTRY}/${REPO}/${DNAME}:latest${DSUFFIX} || true
+              fi
             done
           fi
