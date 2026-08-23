@@ -32,6 +32,7 @@ name: Build docker images - workflow_call/on-demand
 
 env:
   DAYS_to_EXPIRE: 30
+  REGISTRY_OWNER: myzubster-ecosystem
 
 permissions:
   contents: read
@@ -56,7 +57,7 @@ jobs:
             echo "Get tari version"
             TARI_SOURCE_ROOT="./"
             VAPP=$(awk -F ' = ' '$1 ~ /^version/ \
-              { gsub(/["]/, "", $2); printf("%s",$2) }' \
+              { gsub(/[\"]/, "", $2); printf("%s",$2) }' \
               "${TARI_SOURCE_ROOT}/Cargo.toml")
             VBRANCH=$(git --git-dir ${TARI_SOURCE_ROOT}/.git branch --show-current)
             VSHA_SHORT=$(git --git-dir ${TARI_SOURCE_ROOT}/.git rev-parse --short HEAD)
@@ -113,7 +114,7 @@ jobs:
 
             if [ ! -z "${{ inputs.tag_alias }}" ] ; then
               echo "Setup tag_alias with network"
-              echo "TAG_ALIASG=ghcr.io/${{ github.repository_owner }}/${{ matrix.builds.image_name }}:${{ inputs.tag_alias }}-${{ matrix.builds.tari_network }}-${{ matrix.builds.arch }}" >> $GITHUB_ENV
+              echo "TAG_ALIASG=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ matrix.builds.image_name }}:${{ inputs.tag_alias }}-${{ matrix.builds.tari_network }}-${{ matrix.builds.arch }}" >> $GITHUB_ENV
             fi
             echo "DSuffix=-${{ matrix.builds.tari_network }}-${{ matrix.builds.arch }}" >> $GITHUB_ENV
           else
@@ -139,7 +140,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.builds.image_name }}
+            ghcr.io/${{ env.REGISTRY_OWNER }}/${{ matrix.builds.image_name }}
           tags: |
             type=schedule
             type=ref,event=tag
@@ -189,7 +190,7 @@ jobs:
             TARI_TARGET_NETWORK=${{ matrix.builds.tari_target_network }}
             ${{ env.DOCKER_SUBTAG }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.builds.image_name }}:${{ matrix.builds.version }}${{ env.DSuffix }}
+            ghcr.io/${{ env.REGISTRY_OWNER }}/${{ matrix.builds.image_name }}:${{ matrix.builds.version }}${{ env.DSuffix }}
             ${{ steps.meta.outputs.tags }}
             ${{ env.TAG_ALIASG }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -258,7 +259,7 @@ jobs:
               fi
 
               DREGISTRY=ghcr.io
-              REPO="${{ github.repository_owner }}"
+              REPO="${{ env.REGISTRY_OWNER }}"
               echo "Creating multi-arch image for ${REPO}/${DNAME} for ${DVERSION}${DSUFFIX}"
               docker manifest create \
                 ${DREGISTRY}/${REPO}/${DNAME}:${DVERSION}${DSUFFIX} \
