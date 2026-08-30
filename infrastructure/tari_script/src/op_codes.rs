@@ -71,7 +71,9 @@ pub fn slice_to_vec_pubkeys(slice: &[u8], num: usize) -> Result<Vec<CompressedKe
     }
 
     let public_keys = slice
-        .chunks_exact(PUBLIC_KEY_LENGTH)
+        .as_chunks::<PUBLIC_KEY_LENGTH>()
+        .0
+        .iter()
         .take(num)
         .map(CompressedKey::from_canonical_bytes)
         .collect::<Result<Vec<CompressedKey<RistrettoPublicKey>>, ByteArrayError>>()?;
