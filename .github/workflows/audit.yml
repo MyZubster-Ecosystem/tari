@@ -17,11 +17,21 @@ name: Security audit - daily
   # Run manually
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   security_audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Refresh security-sensitive dependencies
+        run: |
+          cargo update -p warp --precise 0.4.3
+          cargo update -p h2@0.4.15 --precise 0.4.19
+          cargo update -p junit-report
+          cargo update -p quick-xml --precise 0.41.0
       - uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
