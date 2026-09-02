@@ -18,7 +18,7 @@ name: Security audit - daily
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -34,6 +34,15 @@ jobs:
           cargo update -p h2@0.4.15 --precise 0.4.19
           cargo update -p junit-report
           cargo update -p quick-xml --precise 0.41.0
+      - name: Persist refreshed Cargo.lock
+        run: |
+          if ! git diff --quiet -- Cargo.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Cargo.lock
+            git commit -m "fix(security): refresh Cargo.lock"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: security-cargo-lock
