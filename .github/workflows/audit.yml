@@ -27,11 +27,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Refresh security-sensitive dependencies
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
         run: |
           cargo update -p warp --precise 0.4.3
           cargo update -p h2@0.4.15 --precise 0.4.19
           cargo update -p junit-report
           cargo update -p quick-xml --precise 0.41.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-cargo-lock
+          path: Cargo.lock
       - uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
