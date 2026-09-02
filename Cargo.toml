@@ -117,3 +117,4 @@ debug = false
 
 [patch.crates-io]
 liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-tari.1" }
+junit-report = { git = "https://github.com/bachp/junit-report-rs", rev = "b9366d968e3e6a88933695b491a89add91feef85" }
