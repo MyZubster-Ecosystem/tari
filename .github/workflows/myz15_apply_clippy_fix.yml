@@ -4,6 +4,7 @@ name: "MYZ-15 apply Clippy fix"
 "on":
   pull_request:
     types:
+      - opened
       - reopened
 
 permissions:
