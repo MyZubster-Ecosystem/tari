@@ -4,6 +4,8 @@ from pathlib import Path
 def replace_once(path: str, old: str, new: str, label: str) -> None:
     p = Path(path)
     s = p.read_text()
+    if new in s and old not in s:
+        return
     count = s.count(old)
     if count != 1:
         raise SystemExit(f"{label}: expected exactly one match, found {count}")
@@ -24,18 +26,10 @@ replace_once(
     "sqlite_db",
 )
 
-replace_once(
-    ".github/workflows/ci.yml",
-    "ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder:5.3.10",
-    "ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder:5.4.2",
-    "ledger builder pin",
-)
-
 p = Path("my_escrow_contract/src/lib.rs")
 s = p.read_text()
-if "Copyright" in s and "The Tari Project" in s:
-    raise SystemExit("my_escrow_contract/src/lib.rs already has a Tari copyright header")
-header = """// Copyright 2026. The Tari Project
+if not ("Copyright" in s and "The Tari Project" in s):
+    header = """// Copyright 2026. The Tari Project
 // Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 // following conditions are met:
 // 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
@@ -53,4 +47,4 @@ header = """// Copyright 2026. The Tari Project
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-p.write_text(header + s)
+    p.write_text(header + s)
