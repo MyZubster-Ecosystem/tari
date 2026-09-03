@@ -1,0 +1,35 @@
+---
+name: "MYZ-16 Ledger builder 5.4.2 test"
+
+"on":
+  push:
+    branches:
+      - "myz-16-ledger-builder-5-4-2-test"
+  pull_request:
+    paths:
+      - ".github/workflows/myz16_ledger_builder_test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ledger-build-tests:
+    name: ledger build tests (builder 5.4.2)
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE: "ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder:5.4.2"
+    steps:
+      - name: checkout tari
+        uses: actions/checkout@v7
+      - name: ledger build tests
+        shell: bash
+        run: |
+          for ledger_target in stax flex nanosplus nanox; do
+            echo "Building for ${ledger_target}"
+            docker run --rm \
+              -v "${GITHUB_WORKSPACE}:/app" \
+              -w /app/applications/minotari_ledger_wallet/wallet \
+              "${DOCKER_IMAGE}" \
+              cargo ledger build "${ledger_target}" -- --locked
+          done
