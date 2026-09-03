@@ -17,6 +17,11 @@ name: Security audit - daily
   # Run manually
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+  issues: write
+
 jobs:
   security_audit:
     runs-on: ubuntu-latest
