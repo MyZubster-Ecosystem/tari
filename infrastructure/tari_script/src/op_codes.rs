@@ -75,7 +75,7 @@ pub fn slice_to_vec_pubkeys(slice: &[u8], num: usize) -> Result<Vec<CompressedKe
         .0
         .iter()
         .take(num)
-        .map(CompressedKey::from_canonical_bytes)
+        .map(|bytes| CompressedKey::from_canonical_bytes(&bytes[..]))
         .collect::<Result<Vec<CompressedKey<RistrettoPublicKey>>, ByteArrayError>>()?;
 
     Ok(public_keys)
