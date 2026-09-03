@@ -1,0 +1,45 @@
+---
+name: "MYZ-15 Clippy coercion test"
+
+"on":
+  pull_request:
+    paths:
+      - ".github/workflows/myz15_clippy_fix_test.yml"
+      - "infrastructure/tari_script/src/op_codes.rs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clippy-fix-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+      - name: apply candidate coercion fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('infrastructure/tari_script/src/op_codes.rs')
+          s = p.read_text()
+          old = '.map(CompressedKey::from_canonical_bytes)'
+          new = '.map(|bytes| CompressedKey::from_canonical_bytes(&bytes[..]))'
+          if old not in s:
+              raise SystemExit('expected failing map expression not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: ubuntu dependencies
+        run: |
+          sudo apt-get update
+          sudo bash scripts/install_ubuntu_dependencies.sh
+      - name: cargo check tari_script
+        run: cargo check --locked --package tari_script
+      - name: clippy tari_script
+        run: cargo clippy --locked --package tari_script --all-targets --all-features -- -D warnings
